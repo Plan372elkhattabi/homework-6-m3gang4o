@@ -1,8 +1,122 @@
 ---
-title: PLAN 372
-author: Your Name
+title: PLAN 372 HW 6
+author: Megan Gao
 ---
 
-Place your analysis code in this file; you must not rename it, though you may delete these instructions. Please update the block above with the name of the assignment and with your name.When you push your code to github, it will automatically be rendered for grading. You can see whether the automatic rendering worked in the "Actions" tab of the github repository.
+```{r}
+library(tidyverse)
+```
 
-If you use any libraries other than `tidyverse`, `lubridate`, `sf`, `ggplot2`, `here`, `terra`, `ggspatial`, `rJavaEnv`, and `r5r`, add them to the list in the DESCRIPTION file.
+```{r}
+trees <- read_csv("TS3_Raw_tree_data.csv")
+```
+
+## Question 1: Sample sizes by state
+
+```{r}
+trees <- trees %>%
+  mutate(
+    state = str_extract(City, "[A-Z]{2}$"),
+    city = str_extract(City, "^[^,]+")
+  )
+
+state_counts <- trees %>%
+  group_by(state) %>%
+  summarize(n = n()) %>%
+  ungroup()
+
+state_counts
+```
+
+The dataset contains observations from multiple states, with California having the highest count, followed by other states across the US.
+
+```{r}
+ggplot(state_counts, aes(x = state, y = n)) +
+  geom_col() +
+  theme_minimal()
+```
+
+## Question 2: Cities in NC/SC
+
+```{r}
+trees_nc_sc <- trees %>%
+  filter(state %in% c("NC", "SC"))
+
+unique(trees_nc_sc$city)
+```
+
+## Question 3: Genera and species
+
+```{r}
+trees_nc_sc <- trees_nc_sc %>%
+  mutate(genus = str_extract(ScientificName, "^[A-Z][a-z]+"))
+
+genus_crown <- trees_nc_sc %>%
+  group_by(genus) %>%
+  summarize(mean_diameter = mean(`AvgCdia (m)`, na.rm = TRUE)) %>%
+  ungroup() %>%
+  arrange(desc(mean_diameter))
+
+genus_crown
+```
+
+The genus with the largest average crown diameter is `r genus_crown$genus[1]` with a diameter of `r round(genus_crown$mean_diameter[1], 2)` meters.
+
+## Question 4: Tree age
+
+```{r}
+genus_age <- trees_nc_sc %>%
+  group_by(genus) %>%
+  summarize(mean_age = mean(Age, na.rm = TRUE)) %>%
+  ungroup() %>%
+  arrange(desc(mean_age))
+
+genus_age
+```
+
+Yes, there are differences in average age across genera. The oldest genus on average is `r genus_age$genus[1]` with a mean age of `r round(genus_age$mean_age[1], 1)` years. This could partially explain the crown diameter results, as older trees tend to have larger crowns.
+
+## Extra Credit: Genera recommendation
+
+```{r}
+crown_per_year <- trees_nc_sc %>%
+  filter(!is.na(Age) & Age > 0 & !is.na(`AvgCdia (m)`)) %>%
+  group_by(genus) %>%
+  summarize(
+    mean_diameter = mean(`AvgCdia (m)`, na.rm = TRUE),
+    mean_age = mean(Age, na.rm = TRUE),
+    growth_rate = mean_diameter / mean_age,
+    n = n()
+  ) %>%
+  ungroup() %>%
+  filter(n >= 10) %>%
+  arrange(desc(growth_rate))
+
+crown_per_year
+```
+
+I recommend **`r crown_per_year$genus[1]`** as it has the highest crown diameter per year of age (`r round(crown_per_year$growth_rate[1], 3)` meters/year) among genera with at least 10 observations. This genus produces a large crown quickly.
+
+## Extra Credit: Species
+
+```{r}
+trees <- trees %>%
+  mutate(
+    genus = str_extract(ScientificName, "^[A-Z][a-z]+"),
+    species = str_extract(ScientificName, "(?:\\s+x\\s+|\\s+)[a-z]+") %>%
+      str_remove("^\\s+x\\s+|^\\s+")
+  )
+
+species_per_genus <- trees %>%
+  filter(!is.na(genus) & !is.na(species)) %>%
+  group_by(genus) %>%
+  summarize(n_species = n_distinct(species)) %>%
+  ungroup() %>%
+  arrange(desc(n_species))
+
+species_per_genus
+```
+
+## AI Reflection
+
+I used ChatGPT to help understand how to apply regular expressions and tidyverse functions such as mutate, filter, and summarize. I mainly used it to clarify syntax and debug issues. It supported my learning by helping me better understand how to manipulate strings and structure my analysis using concepts from class.
